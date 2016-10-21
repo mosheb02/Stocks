@@ -1,12 +1,14 @@
 package core.jackson;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public class CompanySummaryDetails {
-	String m_ticker;
-	String m_name;
-	double m_marketValue;
-	LocalDate m_nextEarningDate;
+	private String m_ticker;
+	private String m_name;
+	private double m_marketValue;
+	private LocalDate m_nextEarningDate;
+	private List<String> m_readableNames;
 
 	public String getTicker() {
 		return m_ticker;
@@ -38,6 +40,14 @@ public class CompanySummaryDetails {
 
 	public void setNextEarningDate(LocalDate nextEarningDate) {
 		this.m_nextEarningDate = nextEarningDate;
+	}
+
+	public List<String> getReadableNames() {
+		return m_readableNames;
+	}
+
+	public void setReadableNames(List<String> readableNames) {
+		m_readableNames = readableNames;
 	}
 
 }

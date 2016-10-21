@@ -7,6 +7,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -36,20 +37,23 @@ public class Stocker {
 			+ "%22&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys&callback=";
 
 	private final StocksDAO m_stocksConnection = StocksDAO.getConnection();
-	
-	public List<Document> getLargestCompaniesAnalysis()
-	{
+
+	private final String[] REMOVABLE_NAME_SFUFFIXS = new String[] { "Co", "Inc", "Ltd", "Corp", "& Co"};
+
+	public List<Document> getLargestCompaniesAnalysis() {
 		return m_stocksConnection.getAllCollectionElements(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_LARGEST_COMPANIES);
 
 	}
+
 	public List<CompanySummaryDetails> analyzeByFutureEarnings(int noOfDaysForward, int numOfCompaniesCache)
 			throws JsonParseException, JsonMappingException, IOException {
 
 		final List<CompanySummaryDetails> sortedLargestCompanies = new ArrayList<CompanySummaryDetails>(
 				numOfCompaniesCache);
 		final Map<String, CompanySummaryDetails> stocksCache = new ConcurrentHashMap<String, CompanySummaryDetails>();
+
 		// Drop collections
-		m_stocksConnection.dropCollection(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_ERROR_LOG_COLLECTION);
+		//m_stocksConnection.dropCollection(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_ERROR_LOG_COLLECTION);
 		m_stocksConnection.dropCollection(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_QUOTES_COLLECTION);
 		m_stocksConnection.dropCollection(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_LARGEST_COMPANIES);
 
@@ -71,15 +75,12 @@ public class Stocker {
 						new TypeReference<List<CompanyEvent>>() {
 						});
 
-				for (final CompanyEvent companyEvent : companyEvents) 
-				{
+				for (final CompanyEvent companyEvent : companyEvents) {
 					final CompanySummaryDetails companySummaryDetails = handleQuote(mapper, companyEvent, stocksCache);
-					if (companySummaryDetails == null )
-					{
+					if (companySummaryDetails == null) {
 						continue;
 					}
-					if (sortedLargestCompanies.size() < numOfCompaniesCache) 
-					{
+					if (sortedLargestCompanies.size() < numOfCompaniesCache) {
 						sortedLargestCompanies.add(companySummaryDetails);
 						sortCompanies(sortedLargestCompanies);
 					} else if (companySummaryDetails.getMarketValue() > sortedLargestCompanies
@@ -93,12 +94,12 @@ public class Stocker {
 			noOfDaysForward--;
 			dateOfEarnings = dateOfEarnings.plusDays(1);
 		}
-		
-		for (final CompanySummaryDetails companySummaryDetails : sortedLargestCompanies)
-		{
-			m_stocksConnection.insert(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_LARGEST_COMPANIES, mapper.writeValueAsString(companySummaryDetails));
+
+		for (final CompanySummaryDetails companySummaryDetails : sortedLargestCompanies) {
+			m_stocksConnection.insert(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_LARGEST_COMPANIES,
+					mapper.writeValueAsString(companySummaryDetails));
 		}
-		
+
 		return sortedLargestCompanies;
 	}
 
@@ -117,48 +118,62 @@ public class Stocker {
 
 	private CompanySummaryDetails handleQuote(final ObjectMapper mapper, final CompanyEvent companyEvent,
 			Map<String, CompanySummaryDetails> stocksCache)
-			throws IOException, MalformedURLException, JsonParseException, JsonMappingException 
-	{
-		try
-		{
-		CompanySummaryDetails companySummaryDetails;
-		companySummaryDetails = stocksCache.get(companyEvent.getCompany().getUsableTicker());
-		if (companySummaryDetails != null)
-		{
-			return companySummaryDetails;
-		}
-			
-		final String quoteResponse = ClientUtils.getJsonResponse(m_stocksConnection, StocksDAO.STOCKER_DB, StocksDAO.STOCKER_ERROR_LOG_COLLECTION,
-				new URL(GET_QUOTE_BY_TICKER_URL.replace(TICKER_REPLACMENT_SYMBOL,
-						companyEvent.getCompany().getUsableTicker())));
-		int quoteIndex = quoteResponse.indexOf(QUOTE_ID);
-		if (quoteIndex > 0) {
-			Quote quote = mapper.readValue(
-					quoteResponse.substring(quoteIndex + QUOTE_ID.length() + 1, quoteResponse.length() - 3),
-					Quote.class);
-
-			if (quote != null) {
-				m_stocksConnection.insert(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_QUOTES_COLLECTION, quoteResponse);
-				companySummaryDetails = new CompanySummaryDetails();
-				companySummaryDetails.setTicker(companyEvent.getCompany().getUsableTicker());
-				companySummaryDetails.setName(companyEvent.getCompany().getName());
-				companySummaryDetails.setNextEarningDate(LocalDate.parse(companyEvent.getEventTime().getDate(),
-						DateTimeFormatter.ofPattern("MM/dd/yyyy")));
-				companySummaryDetails.setMarketValue(getMarketValue(quote.getMarketCapitalization()));
-				stocksCache.put(companySummaryDetails.getTicker(), companySummaryDetails);
-				
-				System.out.println(companyEvent.getCompany().getUsableTicker() + " "
-						+ companyEvent.getCompany().getName() + " Market value " + quote.getMarketCapitalization() + " " + quote.getAsk());
-				
+			throws IOException, MalformedURLException, JsonParseException, JsonMappingException {
+		try {
+			CompanySummaryDetails companySummaryDetails;
+			companySummaryDetails = stocksCache.get(companyEvent.getCompany().getUsableTicker());
+			if (companySummaryDetails != null) {
 				return companySummaryDetails;
 			}
-		}
-		}
-		catch (Exception e)
-		{
+
+			final String quoteResponse = ClientUtils.getJsonResponse(m_stocksConnection, StocksDAO.STOCKER_DB,
+					StocksDAO.STOCKER_ERROR_LOG_COLLECTION, new URL(GET_QUOTE_BY_TICKER_URL
+							.replace(TICKER_REPLACMENT_SYMBOL, companyEvent.getCompany().getUsableTicker())));
+			int quoteIndex = quoteResponse.indexOf(QUOTE_ID);
+			if (quoteIndex > 0) {
+				Quote quote = mapper.readValue(
+						quoteResponse.substring(quoteIndex + QUOTE_ID.length() + 1, quoteResponse.length() - 3),
+						Quote.class);
+
+				if (quote != null) {
+					m_stocksConnection.insert(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_QUOTES_COLLECTION, quoteResponse);
+					companySummaryDetails = new CompanySummaryDetails();
+					companySummaryDetails.setTicker(companyEvent.getCompany().getUsableTicker());
+					companySummaryDetails.setName(companyEvent.getCompany().getName());
+					companySummaryDetails.setNextEarningDate(LocalDate.parse(companyEvent.getEventTime().getDate(),
+							DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+					companySummaryDetails.setMarketValue(getMarketValue(quote.getMarketCapitalization()));
+					companySummaryDetails.setReadableNames(getReadableNames(companyEvent.getCompany().getName()));
+					stocksCache.put(companySummaryDetails.getTicker(), companySummaryDetails);
+
+					System.out.println(
+							companyEvent.getCompany().getUsableTicker() + " " + companyEvent.getCompany().getName()
+									+ " Market value " + quote.getMarketCapitalization() + " " + quote.getAsk());
+
+					return companySummaryDetails;
+				}
+			}
+		} catch (Exception e) {
 			e.printStackTrace();
 		}
 		return null;
+	}
+
+	private List<String> getReadableNames(String companyName) {
+		List<String> readableNames = new LinkedList<>();
+		int removableSuffixIndex = -1;
+		for (final String removableSuffix : REMOVABLE_NAME_SFUFFIXS) {
+			int currentIndex = companyName.indexOf(removableSuffix);
+			if (currentIndex > -1 && (removableSuffixIndex == -1 || currentIndex < removableSuffixIndex)) {
+				removableSuffixIndex = currentIndex;
+			}
+		}
+		final String readableName = removableSuffixIndex > -1 ? companyName.substring(0, removableSuffixIndex - 1)
+				: companyName;
+		
+		readableNames.add(readableName.trim());
+		
+		return readableNames;
 	}
 
 	private double getMarketValue(String marketValue) {
