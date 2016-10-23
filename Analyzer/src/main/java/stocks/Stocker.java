@@ -1,10 +1,10 @@
-package core;
+package stocks;
 
 import java.io.IOException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedList;
@@ -19,11 +19,15 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mongodb.BasicDBObject;
+import com.mongodb.client.FindIterable;
+import com.mongodb.client.MongoCollection;
 
 import DAO.StocksDAO;
-import core.jackson.CompanyEvent;
-import core.jackson.CompanySummaryDetails;
-import core.jackson.Quote;
+import jackson.CompaniesIteration;
+import jackson.CompanyEvent;
+import jackson.CompanySummaryDetails;
+import jackson.Quote;
 import utils.ClientUtils;
 
 public class Stocker {
@@ -38,31 +42,38 @@ public class Stocker {
 
 	private final StocksDAO m_stocksConnection = StocksDAO.getConnection();
 
-	private final String[] REMOVABLE_NAME_SFUFFIXS = new String[] { "Co", "Inc", "Ltd", "Corp", "& Co"};
+	private final String[] REMOVABLE_NAME_SFUFFIXS = new String[] { " Co", " Inc", " Ltd", " Corp", "& Co" };
 
-	public List<Document> getLargestCompaniesAnalysis() {
-		return m_stocksConnection.getAllCollectionElements(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_LARGEST_COMPANIES);
+	public CompaniesIteration getLargestCompaniesAnalysisByIteration(int iterationNo) throws JsonParseException, JsonMappingException, IOException {
 
+		@SuppressWarnings("unchecked")
+		List<CompaniesIteration> iterResults = (List<CompaniesIteration>)m_stocksConnection.getIterResults(
+				m_stocksConnection.getCollection(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_LARGEST_COMPANIES).find(
+						new BasicDBObject("iterationNo", iterationNo > 1 ? iterationNo : getMaxIterationNumber())),CompaniesIteration.class);
+		if (iterResults != null && iterResults.size() >0)
+		{
+			return iterResults.get(0);
+		}
+		return null;
 	}
 
-	public List<CompanySummaryDetails> analyzeByFutureEarnings(int noOfDaysForward, int numOfCompaniesCache)
+	public CompaniesIteration calculateLargestCompaniesByFutureEarnings(int noOfDaysForward, int numOfCompaniesCache)
 			throws JsonParseException, JsonMappingException, IOException {
 
+		final CompaniesIteration companiesIteration = new CompaniesIteration();
+		companiesIteration.setIterationNo(getMaxIterationNumber() + 1);
+		companiesIteration.setNoOfDaysForward(noOfDaysForward);
+		companiesIteration.setIterationDateTime(LocalDateTime.now().toString());
 		final List<CompanySummaryDetails> sortedLargestCompanies = new ArrayList<CompanySummaryDetails>(
 				numOfCompaniesCache);
 		final Map<String, CompanySummaryDetails> stocksCache = new ConcurrentHashMap<String, CompanySummaryDetails>();
-
-		// Drop collections
-		//m_stocksConnection.dropCollection(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_ERROR_LOG_COLLECTION);
-		m_stocksConnection.dropCollection(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_QUOTES_COLLECTION);
-		m_stocksConnection.dropCollection(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_LARGEST_COMPANIES);
 
 		// Configure jackson mapper
 		final ObjectMapper mapper = new ObjectMapper();
 		mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
 		LocalDate dateOfEarnings = LocalDate.now();
-		while (noOfDaysForward > 0) {
+		while (numOfCompaniesCache > 0 && noOfDaysForward > 0) {
 			final String futureEventsByDateURL = new StringBuilder(GET_FUTURE_EVENTS_BY_DATE_URL).append(dateOfEarnings)
 					.toString();
 
@@ -95,12 +106,20 @@ public class Stocker {
 			dateOfEarnings = dateOfEarnings.plusDays(1);
 		}
 
-		for (final CompanySummaryDetails companySummaryDetails : sortedLargestCompanies) {
-			m_stocksConnection.insert(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_LARGEST_COMPANIES,
-					mapper.writeValueAsString(companySummaryDetails));
-		}
+		companiesIteration.setCompanies(sortedLargestCompanies);
 
-		return sortedLargestCompanies;
+		m_stocksConnection.insert(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_LARGEST_COMPANIES,
+				mapper.writeValueAsString(companiesIteration));
+
+		return companiesIteration;
+	}
+
+	private int getMaxIterationNumber() {
+		MongoCollection<Document> collection = m_stocksConnection.getCollection(StocksDAO.STOCKER_DB,
+				StocksDAO.STOCKER_LARGEST_COMPANIES);
+		FindIterable<Document> iterableResult = collection.find().sort(new BasicDBObject("iterationNo", -1)).limit(1);
+		List<Document> results = m_stocksConnection.getIterResults(iterableResult);
+		return results.size() > 0 ? results.get(0).getInteger("iterationNo") : 0;
 	}
 
 	private void sortCompanies(final List<CompanySummaryDetails> sortedLargestCompanies) {
@@ -140,8 +159,7 @@ public class Stocker {
 					companySummaryDetails = new CompanySummaryDetails();
 					companySummaryDetails.setTicker(companyEvent.getCompany().getUsableTicker());
 					companySummaryDetails.setName(companyEvent.getCompany().getName());
-					companySummaryDetails.setNextEarningDate(LocalDate.parse(companyEvent.getEventTime().getDate(),
-							DateTimeFormatter.ofPattern("MM/dd/yyyy")));
+					companySummaryDetails.setNextEarningDate(companyEvent.getEventTime().getDate());
 					companySummaryDetails.setMarketValue(getMarketValue(quote.getMarketCapitalization()));
 					companySummaryDetails.setReadableNames(getReadableNames(companyEvent.getCompany().getName()));
 					stocksCache.put(companySummaryDetails.getTicker(), companySummaryDetails);
@@ -170,9 +188,9 @@ public class Stocker {
 		}
 		final String readableName = removableSuffixIndex > -1 ? companyName.substring(0, removableSuffixIndex - 1)
 				: companyName;
-		
+
 		readableNames.add(readableName.trim());
-		
+
 		return readableNames;
 	}
 

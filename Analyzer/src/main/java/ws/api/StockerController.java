@@ -1,25 +1,22 @@
 package ws.api;
 
-import java.util.List;
-
-import org.bson.Document;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import core.Stocker;
-import core.jackson.CompanySummaryDetails;
+import jackson.CompaniesIteration;
+import stocks.Stocker;
 
 @RestController
 public class StockerController {
-	@RequestMapping(value = "/stocker/stocks/analyze", produces = MediaType.APPLICATION_JSON_VALUE)
-	public List<CompanySummaryDetails> analyze(@RequestParam(value = "days", defaultValue = "2") int noOfDaysForwad,
+	@RequestMapping(value = "/stocker/largestCompanies/calculate", produces = MediaType.APPLICATION_JSON_VALUE)
+	public CompaniesIteration calculateLargestCompaniesByFutureEarnings(@RequestParam(value = "days", defaultValue = "2") int noOfDaysForwad,
 			@RequestParam(value = "companies", defaultValue = "10") int noOfCompanies) {
 
 		Stocker stocker = new Stocker();
 		try {
-			return stocker.analyzeByFutureEarnings(noOfDaysForwad, noOfCompanies);
+			return stocker.calculateLargestCompaniesByFutureEarnings(noOfDaysForwad, noOfCompanies);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
@@ -27,11 +24,18 @@ public class StockerController {
 		return null;
 	}
 
-	@RequestMapping(value = "/stocker/getLargestCompanies", produces = MediaType.APPLICATION_JSON_VALUE)
-	public List<Document> getLargestCompanies() {
+	@RequestMapping(value = "/stocker/largestCompanies/get", produces = MediaType.APPLICATION_JSON_VALUE)
+	public CompaniesIteration getLargestCompanies(
+			@RequestParam(value = "iterationNo", defaultValue = "-1") int iterationNo) {
 
 		Stocker stocker = new Stocker();
-		return stocker.getLargestCompaniesAnalysis();
+		try {
+			return stocker.getLargestCompaniesAnalysisByIteration(iterationNo);
+		} catch (Exception e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
+		return null;
 	}
 }

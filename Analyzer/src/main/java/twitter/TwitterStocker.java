@@ -11,9 +11,6 @@ import java.util.List;
 
 import org.bson.Document;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import DAO.StocksDAO;
 import twitter4j.PagableResponseList;
 import twitter4j.Twitter;
@@ -121,13 +118,7 @@ public final class TwitterStocker {
 	
 	public List<Document> getUsers(int startingIndex, int numberOfUsers)
 	{
-		
-		// Configure jackson mapper
-		final ObjectMapper mapper = new ObjectMapper();
-		mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-		
 		return m_stocksConnection.getCollectionElements(StocksDAO.STOCKER_DB, StocksDAO.STOCKER_USERS_COLLECTION,startingIndex,numberOfUsers);
-
 	}
 
 

@@ -1,60 +1,60 @@
-package core.jackson;
+package jackson;
 
 public class CompanyEvent {
 	public CompanyEvent() {
 
 	}
 
-	private Company m_company;
-	private EventTime m_eventTime;
+	private Company company;
+	private EventTime eventTime;
 
 	public Company getCompany() {
-		return m_company;
+		return company;
 	}
 
 	public void setCompany(Company company) {
-		this.m_company = company;
+		this.company = company;
 	}
 
 	public EventTime getEventTime() {
-		return m_eventTime; 
+		return eventTime; 
 	}
 
 	public void setEventTime(EventTime eventTime) {
-		this.m_eventTime = eventTime;
+		this.eventTime = eventTime;
 	}
 	public class Company {
 		public Company() {
 		}
 
-		private String m_ticker;
+		private String ticker;
 		
-		private String m_name;
+		private String name;
 
 		public String getTicker() {
-			return m_ticker;
+			return ticker;
 		}
 		
 		public String getUsableTicker() {
-			if (m_ticker == null)
+			if (ticker == null)
 			{
 				return "";
 			}
-			int indexOfSeperator = m_ticker.indexOf(":");
-			return indexOfSeperator > 0 ? m_ticker.substring(0,indexOfSeperator):m_ticker; 
+			int indexOfSeperator = ticker.indexOf(":");
+			return indexOfSeperator > 0 ? ticker.substring(0,indexOfSeperator):ticker; 
 		}
 
 
 		public void setTicker(String ticker) {
-			this.m_ticker = ticker;
+			this.ticker = ticker;
 		}
 
 		public String getName() {
-			return m_name;
+			return name;
 		}
 
 		public void setName(String name) {
-			this.m_name = name;
+			this.name = name;
 		}
 	}
 
@@ -62,14 +62,14 @@ public class CompanyEvent {
 		public EventTime() {
 		}
 
-		private String m_date;
+		private String date;
 
 		public String getDate() {
-			return m_date;
+			return date;
 		}
 
 		public void setDate(String date) {
-			this.m_date = date;
+			this.date = date;
 		}
 	}
 }
